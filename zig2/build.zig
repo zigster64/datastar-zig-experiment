@@ -1,8 +1,16 @@
 const std = @import("std");
 
+const IoMode = enum { std, zio };
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    const io_mode = b.option(IoMode, "io", "IO backend: std (Io.Threaded, default) or zio (stackful coroutines)") orelse .std;
+
+    const options = b.addOptions();
+    options.addOption(IoMode, "io_mode", io_mode);
+
     const exe = b.addExecutable(.{
         .name = "zig2",
         .root_module = b.createModule(.{
@@ -12,24 +20,40 @@ pub fn build(b: *std.Build) void {
             .imports = &.{},
         }),
     });
+    exe.root_module.addOptions("options", options);
+
     const datastar = b.dependency("datastar", .{
         .target = target,
         .optimize = optimize,
     });
     exe.root_module.addImport("datastar", datastar.module("datastar"));
 
+    const zts = b.dependency("zts", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport("zts", zts.module("zts"));
+
+    if (io_mode == .zio) {
+        const zio = b.dependency("zio", .{
+            .target = target,
+            .optimize = optimize,
+        });
+        exe.root_module.addImport("zio", zio.module("zio"));
+    }
+
     linkSqlite(b, exe.root_module);
 
     b.installArtifact(exe);
-    const run_step = b.step("run", "Run the App");
 
     const run_cmd = b.addRunArtifact(exe);
-    run_step.dependOn(&run_cmd.step);
     run_cmd.step.dependOn(b.getInstallStep());
-
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
+
+    const run_step = b.step("run", "Run the App");
+    run_step.dependOn(&run_cmd.step);
 
     const exe_tests = b.addTest(.{
         .root_module = exe.root_module,

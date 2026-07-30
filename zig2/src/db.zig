@@ -15,18 +15,9 @@ pub const User = struct {
     /// Write this user as an HTML table row with a delete button. `writer`
     /// must satisfy the `std.io.Writer` interface (e.g. `sse.patchElementsWriter`).
     pub fn renderAsTableRow(self: User, writer: anytype) !void {
-        try writer.print(
-            \\    <tr>
-            \\      <td>{[id]}</td>
-            \\      <td>{[name]s}</td>
-            \\      <td>{[email]s}</td>
-            \\      <td class="role">{[role]s}</td>
-            \\      <td><button type="button" class="danger" data-user-id="{[id]}" data-user-name="{[name]s}"
-            \\          data-on:click="$deleteId = el.dataset.userId; $deleteName = el.dataset.userName; document.getElementById('confirm-dialog').showModal()">Delete</button>
-            \\      </td>
-            \\    </tr>
-            \\
-        , self);
+        const zts = @import("zts");
+        const tmpl = @embedFile("html/index.html");
+        try zts.print(tmpl, "users_table_row", self, writer);
     }
 };
 

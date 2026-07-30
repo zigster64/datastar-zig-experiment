@@ -8,6 +8,14 @@
             .url = "git+https://github.com/zigster64/datastar.zig#d3984c57bfc587db7fa2a0fc72f067dc915387b4",
             .hash = "datastar_zig-0.1.0-598RYmVpAQBsfljIBVx6cAZNlaP3yiaxTxvh8szKFiTX",
         },
+        .zio = .{
+            .url = "git+https://github.com/lalinsky/zio?ref=v0.11.0#53abdf9ce5e6279e29703a39180ce1cedd8ac4ca",
+            .hash = "zio-0.11.0-xHbVVEqQGwDz0MYoQ0j7Ke0Y9E_iZVe5eLAWK4gd9U0i",
+        },
+        .zts = .{
+            .url = "git+https://github.com/zigster64/zts#1c5afbb7de40c956f37a0b55e79738219f530c58",
+            .hash = "zts-0.14.1-_M80OQ2-AgAXH9hbZpc1fkAHtI2fnRxKJudZt1Dpb8gY",
+        },
     },
     .paths = .{
         "build.zig",

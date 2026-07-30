@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Benchmark the Go and Zig server implementations one at a time (never
-# concurrently) and print a side-by-side comparison.
+# Benchmark the Go, Zig, zig2 (std), and zig2 (zio) server implementations
+# one at a time (never concurrently) and print a side-by-side comparison.
 #
 # Load, throughput, and latency percentiles come from k6. CPU and memory come
 # from sampling the server process tree (so the Go server's sqinn child counts
@@ -12,7 +12,8 @@
 # optionally perf (Linux) for hardware counters.
 #
 # Usage: ./bench.sh [-d duration] [-c connections] [-w warmup] [-p path]
-#                   [-o go|zig] [-P] [--go-dir DIR] [--zig-dir DIR]
+#                   [-o go|zig|zig2|zig2-zio] [-P]
+#                   [--go-dir DIR] [--zig-dir DIR] [--zig2-dir DIR]
 
 set -euo pipefail
 
@@ -26,6 +27,7 @@ ONLY=
 USE_PERF=1
 GODIR="$SCRIPTDIR/../go"
 ZIGDIR="$SCRIPTDIR/../zig"
+ZIG2DIR="$SCRIPTDIR/../zig2"
 
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -37,6 +39,7 @@ while [ $# -gt 0 ]; do
 	-P) USE_PERF=0; shift ;;
 	--go-dir) GODIR=$2; shift 2 ;;
 	--zig-dir) ZIGDIR=$2; shift 2 ;;
+	--zig2-dir) ZIG2DIR=$2; shift 2 ;;
 	-h | --help) sed -n '2,20p' "$0"; exit 0 ;;
 	*) echo "unknown argument: $1" >&2; exit 2 ;;
 	esac
@@ -48,6 +51,7 @@ done
 
 GODIR=$(cd "$GODIR" && pwd)
 ZIGDIR=$(cd "$ZIGDIR" && pwd)
+ZIG2DIR=$(cd "$ZIG2DIR" && pwd)
 SAMPLE_S=0.1
 PERF_EVENTS=task-clock,cycles,instructions,cache-references,cache-misses,branches,branch-misses,context-switches,page-faults
 
@@ -206,16 +210,45 @@ build_zig() {
 	echo "$ZIGDIR/zig-out/bin/zigvibe"
 }
 
-targets=(Go Zig)
-[ -n "$ONLY" ] && targets=("$(tr '[:lower:]' '[:upper:]' <<<"${ONLY:0:1}")${ONLY:1}")
+build_zig2() {
+	echo "building zig2 server (zig build -Doptimize=ReleaseFast) ..." >&2
+	( cd "$ZIG2DIR" && zig build -Doptimize=ReleaseFast )
+	echo "$ZIG2DIR/zig-out/bin/zig2"
+}
 
-for name in "${targets[@]}"; do
-	echo "=== $name ===" >&2
-	case "$name" in
-	Go)  bin=$(build_go) ;;
-	Zig) bin=$(build_zig) ;;
-	*)   echo "unknown target: $name" >&2; exit 2 ;;
+build_zig2_zio() {
+	echo "building zig2-zio server (zig build -Doptimize=ReleaseFast -Dio=zio) ..." >&2
+	( cd "$ZIG2DIR" && zig build -Doptimize=ReleaseFast -Dio=zio )
+	echo "$ZIG2DIR/zig-out/bin/zig2"
+}
+
+# Build the binary for a given target name. stdout: path to the binary.
+build_bin() {
+	case "$1" in
+		Go) build_go ;;
+		Zig) build_zig ;;
+		zig2) build_zig2 ;;
+		zig2-zio) build_zig2_zio ;;
+		*) echo "unknown target: $1" >&2; exit 2 ;;
 	esac
+}
+
+# Default targets: all four; -o overrides.
+if [ -n "$ONLY" ]; then
+	case "$ONLY" in
+		go) TARGETS=(Go) ;;
+		zig) TARGETS=(Zig) ;;
+		zig2) TARGETS=(zig2) ;;
+		zig2-zio) TARGETS=(zig2-zio) ;;
+		*) echo "unknown target: $ONLY (use: go, zig, zig2, zig2-zio)" >&2; exit 2 ;;
+	esac
+else
+	TARGETS=(Go Zig zig2 zig2-zio)
+fi
+
+for name in "${TARGETS[@]}"; do
+	echo "=== $name ===" >&2
+	bin=$(build_bin "$name")
 	addr="127.0.0.1:$(free_port)"
 	run_target "$name" "$bin" "$WORK/$name.db" "$addr" || echo "  $name skipped" >&2
 done
@@ -241,29 +274,54 @@ else
 fi
 echo
 
-printf '%-26s %16s %16s\n' "Metric" "Go" "Zig"
-printf '%-26s %16s %16s\n' "--------------------------" "----------------" "----------------"
-row() { # LABEL GO_VALUE ZIG_VALUE
-	printf '%-26s %16s %16s\n' "$1" "$2" "$3"
+printf '%-26s' "Metric"
+for name in "${TARGETS[@]}"; do
+	printf ' %16s' "$name"
+done
+echo
+printf '%-26s' "--------------------------"
+for name in "${TARGETS[@]}"; do
+	printf ' %16s' "----------------"
+done
+echo
+
+# Build each row from the collected values
+row_metric() {
+	local label=$1 field=$2 fmt=$3
+	local raw=()
+	for name in "${TARGETS[@]}"; do
+		raw[${#raw[@]}]=$(get "$name" "$field")
+	done
+	printf '%-26s' "$label"
+	for val in "${raw[@]}"; do
+		case "$fmt" in
+			f2)  printf ' %16s' "$(f2  "$val")" ;;
+			f0)  printf ' %16s' "$(f0  "$val")" ;;
+			mib) printf ' %16s' "$(mib "$val")" ;;
+			big) printf ' %16s' "$(big "$val")" ;;
+			*)   printf ' %16s' "$val" ;;
+		esac
+	done
+	echo
 }
 
-row "Requests"                 "$(f0  "$(get Go REQS)")"   "$(f0  "$(get Zig REQS)")"
-row "RPS (req/s)"              "$(f0  "$(get Go RPS)")"    "$(f0  "$(get Zig RPS)")"
-row "Latency avg (ms)"        "$(f2  "$(get Go AVG)")"    "$(f2  "$(get Zig AVG)")"
-row "Latency p90 (ms)"        "$(f2  "$(get Go P90)")"    "$(f2  "$(get Zig P90)")"
-row "Latency p99 (ms)"        "$(f2  "$(get Go P99)")"    "$(f2  "$(get Zig P99)")"
-row "CPU avg (% of 1 core)"   "$(f0  "$(get Go CPU)")"    "$(f0  "$(get Zig CPU)")"
-row "Mem avg (MiB)"           "$(mib "$(get Go MEMAVG)")" "$(mib "$(get Zig MEMAVG)")"
-row "Mem max (MiB)"           "$(mib "$(get Go MEMMAX)")" "$(mib "$(get Zig MEMMAX)")"
+row_metric "Requests"                 "REQS"          f0
+row_metric "RPS (req/s)"              "RPS"           f0
+row_metric "Latency avg (ms)"         "AVG"           f2
+row_metric "Latency p90 (ms)"         "P90"           f2
+row_metric "Latency p99 (ms)"         "P99"           f2
+row_metric "CPU avg (% of 1 core)"    "CPU"           f0
+row_metric "Mem avg (MiB)"            "MEMAVG"        mib
+row_metric "Mem max (MiB)"            "MEMMAX"        mib
 if [ "$HAVE_PERF" = 1 ]; then
-	row "Cycles"               "$(big "$(get Go CYCLES)")"        "$(big "$(get Zig CYCLES)")"
-	row "Instructions"         "$(big "$(get Go INSTRUCTIONS)")"  "$(big "$(get Zig INSTRUCTIONS)")"
-	row "Cache misses"         "$(big "$(get Go CACHE_MISSES)")"  "$(big "$(get Zig CACHE_MISSES)")"
-	row "Branch misses"        "$(big "$(get Go BRANCH_MISSES)")" "$(big "$(get Zig BRANCH_MISSES)")"
+	row_metric "Cycles"              "CYCLES"         big
+	row_metric "Instructions"        "INSTRUCTIONS"   big
+	row_metric "Cache misses"        "CACHE_MISSES"   big
+	row_metric "Branch misses"       "BRANCH_MISSES"  big
 fi
 echo
 
-for name in Go Zig; do
+for name in "${TARGETS[@]}"; do
 	have "$name" || continue
 	fr=$(get "$name" FAILRATE)
 	if [ "$(awk -v x="${fr:-0}" 'BEGIN{print (x+0>0)?1:0}')" = 1 ]; then

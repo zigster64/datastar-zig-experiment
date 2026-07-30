@@ -10,26 +10,52 @@
 
 <body
   data-signals="{name: '', email: '', role: 'member', deleteId: '', deleteName: '', addOpen: false, nameError: '', emailError: ''}"
-  data-init="@get('/updates')">
+  data-init="@get('/updates', {filterSignals: {include: '^$'}})">
   <h1>Users</h1>
   <div class="toolbar"><button class="primary" data-on:click="$addOpen = true">Add user</button> <span
       class="theme-tag">Theme: <b id="theme-name">dark</b> (follows your system)</span></div>
   <main id="content">
-    <table id="users"></table>
+    .users_table_start
+    <table id="users">
+      <caption>{} user(s), live-updated over SSE</caption>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        .users_table_row
+        <tr>
+          <td>{[id]}</td>
+          <td>{[name]s}</td>
+          <td>{[email]s}</td>
+          <td class="role">{[role]s}</td>
+          <td><button type="button" class="danger" data-user-id="{[id]}" data-user-name="{[name]s}"
+              data-on:click="$deleteId = el.dataset.userId; $deleteName = el.dataset.userName; document.getElementById('confirm-dialog').showModal()">Delete</button>
+          </td>
+        </tr>
+        .users_table_end
+      </tbody>
+    </table>
+    .index_end
   </main>
   <dialog id="add-dialog" data-effect="$addOpen ? (el.open || el.showModal()) : el.close()"
     data-on:close="$addOpen = false; $nameError = ''; $emailError = ''">
     <form method="dialog">
-      <h2>Add user</h2><label>Name<input data-bind:name="" placeholder="Jane Doe"></label>
+      <h2>Add user</h2><label>Name<input data-bind:name placeholder="Jane Doe"></label>
       <p class="field-error" data-show="$nameError" data-text="$nameError" style="display: none;"></p><label>Email<input
-          type="email" data-bind:email="" placeholder="jane@example.com"></label>
+          type="email" data-bind:email placeholder="jane@example.com"></label>
       <p class="field-error" data-show="$emailError" data-text="$emailError" style="display: none;"></p><label>Role
-        <select data-bind:role="">
+        <select data-bind:role>
           <option value="member">member</option>
           <option value="admin">admin</option>
         </select></label>
       <menu><button value="cancel">Cancel</button> <button type="button" class="primary"
-          data-on:click="@post('/users/')">Save</button></menu>
+          data-on:click="@post('/users')">Save</button></menu>
     </form>
   </dialog>
   <dialog id="confirm-dialog">
