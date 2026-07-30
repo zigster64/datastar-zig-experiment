@@ -1,0 +1,44 @@
+/* Colors are defined once with light-dark(): the browser picks the
+   light or dark value from the used `color-scheme`, which follows
+   the OS setting by default and can be overridden per-element. */
+:root {
+  color-scheme: light dark;
+  --bg:            light-dark(#ffffff, #14181f);
+  --fg:            light-dark(#1a1a1a, #e7e9ee);
+  --muted:         light-dark(#666666, #9aa4b2);
+  --border:        light-dark(#dddddd, #2b3240);
+  --border-strong: light-dark(#999999, #3a4150);
+  --row-alt:       light-dark(#f6f6f6, #1b2029);
+  --btn-bg:        light-dark(#ffffff, #1b2029);
+  --btn-border:    light-dark(#bbbbbb, #3a4150);
+  --accent:        light-dark(#1a56db, #4f83ff);
+  --danger:        light-dark(#d1495b, #ff6b81);
+  --surface:       light-dark(#ffffff, #1b2029);
+  --shadow:        light-dark(rgba(0,0,0,.2), rgba(0,0,0,.6));
+  --backdrop:      light-dark(rgba(0,0,0,.35), rgba(0,0,0,.6));
+}
+/* The runtime listener (app.js) sets data-theme to force a specific
+   scheme; without it, the OS wins. */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"]  { color-scheme: dark; }
+
+body { font-family: system-ui, sans-serif; margin: 2rem; background: var(--bg); color: var(--fg); }
+h1 { font-size: 1.5rem; }
+table { border-collapse: collapse; width: 100%; max-width: 760px; }
+caption { text-align: left; color: var(--muted); margin-bottom: .5rem; }
+th, td { text-align: left; padding: .5rem .75rem; border-bottom: 1px solid var(--border); }
+thead th { border-bottom: 2px solid var(--border-strong); }
+tbody tr:nth-child(even) { background: var(--row-alt); }
+.role { font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+button { font: inherit; padding: .35rem .7rem; border-radius: 6px; border: 1px solid var(--btn-border); background: var(--btn-bg); color: var(--fg); cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { border-color: var(--danger); color: var(--danger); }
+.toolbar { margin: 1rem 0; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.theme-tag { color: var(--muted); font-size: .85rem; }
+dialog { border: none; border-radius: 10px; padding: 1.25rem 1.5rem; background: var(--surface); color: var(--fg); box-shadow: 0 10px 40px var(--shadow); }
+dialog::backdrop { background: var(--backdrop); }
+dialog h2 { margin-top: 0; }
+dialog label { display: block; margin: .6rem 0; }
+dialog input, dialog select { font: inherit; padding: .3rem; width: 100%; box-sizing: border-box; }
+dialog menu { display: flex; gap: .5rem; justify-content: flex-end; padding: 0; margin: 1rem 0 0; }
+.field-error { color: var(--danger); font-weight: 600; font-size: .85rem; margin: -.35rem 0 .4rem; }

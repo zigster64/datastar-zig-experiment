@@ -1,0 +1,47 @@
+<html lang="en" data-theme="dark">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Users</title>
+  <script type="module" src="/static/datastar.js"></script>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+
+<body
+  data-signals="{name: '', email: '', role: 'member', deleteId: '', deleteName: '', addOpen: false, nameError: '', emailError: ''}"
+  data-init="@get('/updates')">
+  <h1>Users</h1>
+  <div class="toolbar"><button class="primary" data-on:click="$addOpen = true">Add user</button> <span
+      class="theme-tag">Theme: <b id="theme-name">dark</b> (follows your system)</span></div>
+  <main id="content">
+    <table id="users"></table>
+  </main>
+  <dialog id="add-dialog" data-effect="$addOpen ? (el.open || el.showModal()) : el.close()"
+    data-on:close="$addOpen = false; $nameError = ''; $emailError = ''">
+    <form method="dialog">
+      <h2>Add user</h2><label>Name<input data-bind:name="" placeholder="Jane Doe"></label>
+      <p class="field-error" data-show="$nameError" data-text="$nameError" style="display: none;"></p><label>Email<input
+          type="email" data-bind:email="" placeholder="jane@example.com"></label>
+      <p class="field-error" data-show="$emailError" data-text="$emailError" style="display: none;"></p><label>Role
+        <select data-bind:role="">
+          <option value="member">member</option>
+          <option value="admin">admin</option>
+        </select></label>
+      <menu><button value="cancel">Cancel</button> <button type="button" class="primary"
+          data-on:click="@post('/users/')">Save</button></menu>
+    </form>
+  </dialog>
+  <dialog id="confirm-dialog">
+    <form method="dialog">
+      <h2>Delete user</h2>
+      <p>Really delete <strong data-text="$deleteName"></strong>?</p>
+      <menu><button value="cancel">Cancel</button> <button type="button" class="danger"
+          data-on:click="@delete('/users/' + $deleteId); document.getElementById('confirm-dialog').close()">Delete</button>
+      </menu>
+    </form>
+  </dialog>
+  <script src="/static/app.js"></script>
+</body>
+
+</html>

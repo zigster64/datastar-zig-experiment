@@ -1,0 +1,68 @@
+<table id="users">
+  <caption>6 user(s), live-updated over SSE</caption>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Name</th>
+      <th>Email</th>
+      <th>Role</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Ada Lovelace</td>
+      <td>ada@example.com</td>
+      <td class="role">admin</td>
+      <td><button type="button" class="danger" data-user-id="1" data-user-name="Ada Lovelace"
+          data-on:click="$deleteId = el.dataset.userId; $deleteName = el.dataset.userName; document.getElementById('confirm-dialog').showModal()">Delete</button>
+      </td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Alan Turing</td>
+      <td>alan@example.com</td>
+      <td class="role">admin</td>
+      <td><button type="button" class="danger" data-user-id="2" data-user-name="Alan Turing"
+          data-on:click="$deleteId = el.dataset.userId; $deleteName = el.dataset.userName; document.getElementById('confirm-dialog').showModal()">Delete</button>
+      </td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Grace Hopper</td>
+      <td>grace@example.com</td>
+      <td class="role">member</td>
+      <td><button type="button" class="danger" data-user-id="3" data-user-name="Grace Hopper"
+          data-on:click="$deleteId = el.dataset.userId; $deleteName = el.dataset.userName; document.getElementById('confirm-dialog').showModal()">Delete</button>
+      </td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Katherine Johnson</td>
+      <td>katherine@example.com</td>
+      <td class="role">member</td>
+      <td><button type="button" class="danger" data-user-id="4" data-user-name="Katherine Johnson"
+          data-on:click="$deleteId = el.dataset.userId; $deleteName = el.dataset.userName; document.getElementById('confirm-dialog').showModal()">Delete</button>
+      </td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Dennis Ritchie</td>
+      <td>dennis@example.com</td>
+      <td class="role">member</td>
+      <td><button type="button" class="danger" data-user-id="5" data-user-name="Dennis Ritchie"
+          data-on:click="$deleteId = el.dataset.userId; $deleteName = el.dataset.userName; document.getElementById('confirm-dialog').showModal()">Delete</button>
+      </td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Go two</td>
+      <td>two@mail.com</td>
+      <td class="role">member</td>
+      <td><button type="button" class="danger" data-user-id="6" data-user-name="Go two"
+          data-on:click="$deleteId = el.dataset.userId; $deleteName = el.dataset.userName; document.getElementById('confirm-dialog').showModal()">Delete</button>
+      </td>
+    </tr>
+  </tbody>
+</table>

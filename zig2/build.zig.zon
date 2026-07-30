@@ -1,0 +1,17 @@
+.{
+    .name = .zig2,
+    .version = "0.0.0",
+    .fingerprint = 0x80abc3ab1b5c1212, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .datastar = .{
+            .url = "git+https://github.com/zigster64/datastar.zig#d3984c57bfc587db7fa2a0fc72f067dc915387b4",
+            .hash = "datastar_zig-0.1.0-598RYmVpAQBsfljIBVx6cAZNlaP3yiaxTxvh8szKFiTX",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
