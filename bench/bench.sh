@@ -41,12 +41,12 @@ while [ $# -gt 0 ]; do
 	--zig-dir) ZIGDIR=$2; shift 2 ;;
 	--zig2-dir) ZIG2DIR=$2; shift 2 ;;
 	-h | --help) sed -n '2,20p' "$0"; exit 0 ;;
-	*) echo "unknown argument: $1" >&2; exit 2 ;;
+	*) echo "unknown argument: $1" ; exit 2 ;;
 	esac
 done
 
 for tool in k6 jq curl awk python3; do
-	command -v "$tool" >/dev/null || { echo "missing required tool: $tool" >&2; exit 1; }
+	command -v "$tool" >/dev/null || { echo "missing required tool: $tool" ; exit 1; }
 done
 
 GODIR=$(cd "$GODIR" && pwd)
@@ -102,6 +102,7 @@ wait_ready() {
 
 # run_target NAME BIN DB ADDR — start, warm, load, sample, stop; write results.
 run_target() {
+	local extra_args=${5:-}
 	local name=$1 bin=$2 db=$3 addr=$4
 	local url="http://$addr$REQ_PATH" root_url="http://$addr/"
 	local perf_out="$WORK/$name.perf.csv"
@@ -111,16 +112,16 @@ run_target() {
 	rm -f "$db" "$db-wal" "$db-shm" "$rss_samples"
 
 	if [ "$HAVE_PERF" = 1 ]; then
-		perf stat -o "$perf_out" -x , -e "$PERF_EVENTS" -- "$bin" "$addr" "$db" \
+		perf stat -o "$perf_out" -x , -e "$PERF_EVENTS" -- "$bin" "$addr" "$db" $extra_args \
 			>"$WORK/$name.server.log" 2>&1 &
 	else
-		"$bin" "$addr" "$db" >"$WORK/$name.server.log" 2>&1 &
+		"$bin" "$addr" "$db" $extra_args >"$WORK/$name.server.log" 2>&1 &
 	fi
 	LAUNCH_PID=$!
 
 	if ! wait_ready "$root_url"; then
-		echo "  $name server did not become ready; last log lines:" >&2
-		tail -n 5 "$WORK/$name.server.log" >&2 || true
+		echo "  $name server did not become ready; last log lines:" 
+		tail -n 5 "$WORK/$name.server.log"  || true
 		stop_server
 		return 1
 	fi
@@ -132,7 +133,7 @@ run_target() {
 		[ -n "$root" ] || root=$LAUNCH_PID
 	fi
 
-	echo "  warmup ${WARMUP} ..." >&2
+	echo "  warmup ${WARMUP} ..." 
 	TARGET_URL="$url" VUS="$VUS" DURATION="$WARMUP" SUMMARY_OUT="$WORK/$name.warmup.json" \
 		k6 run --quiet "$SCRIPTDIR/load.js" >/dev/null 2>&1 || true
 
@@ -144,7 +145,7 @@ run_target() {
 	( while :; do tree_usage "$root" | awk '{print $1}'; sleep "$SAMPLE_S"; done ) >"$rss_samples" &
 	SAMPLER_PID=$!
 
-	echo "  load ${DURATION} at ${VUS} connections ..." >&2
+	echo "  load ${DURATION} at ${VUS} connections ..." 
 	TARGET_URL="$url" VUS="$VUS" DURATION="$DURATION" SUMMARY_OUT="$summary" \
 		k6 run --quiet "$SCRIPTDIR/load.js" 2>"$WORK/$name.k6.log"
 
@@ -229,7 +230,8 @@ build_bin() {
 		Zig) build_zig ;;
 		zig2) build_zig2 ;;
 		zig2-zio) build_zig2_zio ;;
-		*) echo "unknown target: $1" >&2; exit 2 ;;
+		zig2-zio-cache) build_zig2_zio ;;
+		*) echo "unknown target: $1" ; exit 2 ;;
 	esac
 }
 
@@ -240,17 +242,21 @@ if [ -n "$ONLY" ]; then
 		zig) TARGETS=(Zig) ;;
 		zig2) TARGETS=(zig2) ;;
 		zig2-zio) TARGETS=(zig2-zio) ;;
-		*) echo "unknown target: $ONLY (use: go, zig, zig2, zig2-zio)" >&2; exit 2 ;;
+		zig2-zio-cache) TARGETS=(zig2-zio-cache) ;;
+		*) echo "unknown target: $ONLY (use: go, zig, zig2, zig2-zio)" ; exit 2 ;;
 	esac
 else
-	TARGETS=(Go Zig zig2 zig2-zio)
+	TARGETS=(Go Zig zig2 zig2-zio zig2-zio-cache)
 fi
 
 for name in "${TARGETS[@]}"; do
-	echo "=== $name ===" >&2
+	echo "=== $name ==="
+	extra_args=""; case "$name" in
+		*-cache*) extra_args=cache ;;
+	esac 
 	bin=$(build_bin "$name")
 	addr="127.0.0.1:$(free_port)"
-	run_target "$name" "$bin" "$WORK/$name.db" "$addr" || echo "  $name skipped" >&2
+	run_target "$name" "$bin" "$WORK/$name.db" "$addr" $extra_args || echo "  $name skipped" 
 done
 
 # ---------------------------------------------------------------------------
