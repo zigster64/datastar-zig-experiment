@@ -26,3 +26,19 @@ cd bench
 ```
 
 Requires k6, jq, curl, awk, and python3, plus the Go and Zig toolchains. See [`bench/README.md`](bench/README.md) for flags and details.
+
+## Zig2
+
+This is a handwritten version that pulls in the exact same Sqlite code that zig uses, but then uses the datastar.zig app framework
+to do all the app stuff.
+
+This adds some nice logging, a built in pubsub message bus for CQRS, and gives a DX that is much closer to the Go code (I think)
+
+Its somewhat faster than the Claude generated Zig code ... 
+
+Swapped out the ZT template for ZTS, which should be a way lot faster than ZT. This probably contributes to the good benchmark results quite a bit.
+
+Added an option for building with lalinsky's zio async coroutines ... bringing it more inline with the Go experience, and improving performance a little again.
+
+Then added a cache option to cache the generated users table part of the HTML, so streaming requests dont need to re-scan the whole DB each time. You could
+do the same on the Go and Zig versions too if you want.

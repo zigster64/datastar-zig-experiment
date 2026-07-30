@@ -45,7 +45,7 @@
   </main>
   <dialog id="add-dialog" data-effect="$addOpen ? (el.open || el.showModal()) : el.close()"
     data-on:close="$addOpen = false; $nameError = ''; $emailError = ''">
-    <form method="dialog">
+    <form method="dialog" data-on:submit__prevent="@post('/users')">
       <h2>Add user</h2><label>Name<input data-bind:name placeholder="Jane Doe"></label>
       <p class="field-error" data-show="$nameError" data-text="$nameError" style="display: none;"></p><label>Email<input
           type="email" data-bind:email placeholder="jane@example.com"></label>

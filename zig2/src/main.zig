@@ -20,10 +20,7 @@ const default_db_path = "users.db";
 
 const tmpl = @embedFile("html/index.html");
 
-// message queue schema for pubsub broadcasts
-const MQSchema = union(enum) {
-    users: void,
-};
+const MQSchema = union(enum) { users: void };
 
 const App = struct {
     io: Io,
@@ -31,6 +28,9 @@ const App = struct {
     server: *HTTPServer,
     pubsub: pubsub.PubSub(MQSchema),
     db: sqlite.Db,
+    use_cache: bool,
+    cached_page: ?[]const u8,
+    cache_lock: Io.RwLock,
     db_lock: Io.Mutex,
 
     pub fn init(env: std.process.Init, io: std.Io) !*App {
@@ -38,6 +38,7 @@ const App = struct {
         _ = args.next();
         const address_text = args.next() orelse default_address;
         const db_path: [:0]const u8 = args.next() orelse default_db_path;
+        const use_cache = (args.next() != null);
 
         const port = if (std.mem.lastIndexOfScalar(u8, address_text, ':')) |colon|
             std.fmt.parseInt(u16, address_text[colon + 1 ..], 10) catch |err| {
@@ -69,13 +70,21 @@ const App = struct {
             .pubsub = pubsub.PubSub(MQSchema).init(io, env.gpa),
             .db = app_db,
             .db_lock = Io.Mutex.init,
+            .use_cache = use_cache,
+            .cached_page = null,
+            .cache_lock = Io.RwLock.init,
         };
         return app;
     }
 
     pub fn deinit(app: *App) void {
+        if (app.cached_page) |cp| app.allocator.free(cp);
         app.db.close();
         app.server.deinit();
+    }
+
+    pub fn newArenaWriter(self: *App) ArenaWriter {
+        return ArenaWriter.init(self.allocator);
     }
 
     pub fn getUsers(self: *App) !UsersList {
@@ -94,18 +103,30 @@ const App = struct {
     }
 
     pub fn insertUser(app: *App, name: []const u8, email: []const u8, role: []const u8) !void {
-        app.db_lock.lock(app.io) catch unreachable;
-        defer app.db_lock.unlock(app.io);
-        _ = try db.insertUser(&app.db, name, email, role);
+        {
+            app.db_lock.lock(app.io) catch unreachable;
+            defer app.db_lock.unlock(app.io);
+            _ = try db.insertUser(&app.db, name, email, role);
+        }
+        try app.publishUsers();
     }
 
     pub fn deleteUser(app: *App, id: i64) !void {
-        app.db_lock.lock(app.io) catch unreachable;
-        defer app.db_lock.unlock(app.io);
-        try db.deleteUser(&app.db, id);
+        {
+            app.db_lock.lock(app.io) catch unreachable;
+            defer app.db_lock.unlock(app.io);
+            try db.deleteUser(&app.db, id);
+        }
+        try app.publishUsers();
     }
 
     pub fn publishUsers(app: *App) !void {
+        app.cache_lock.lock(app.io) catch unreachable;
+        defer app.cache_lock.unlock(app.io);
+        if (app.cached_page) |cp| {
+            app.allocator.free(cp);
+            app.cached_page = null;
+        }
         try app.pubsub.publish(.users, .all);
     }
 };
@@ -141,7 +162,9 @@ const ArenaWriter = struct {
     }
 
     pub fn print(self: *ArenaWriter, comptime fmt: []const u8, args: anytype) !void {
-        try self.list.appendSlice(self.allocator, try std.fmt.allocPrint(self.allocator, fmt, args));
+        const tmp = try std.fmt.allocPrint(self.allocator, fmt, args);
+        defer self.allocator.free(tmp);
+        try self.list.appendSlice(self.allocator, tmp);
     }
 
     pub fn writeAll(self: *ArenaWriter, bytes: []const u8) !void {
@@ -176,14 +199,34 @@ pub fn main(init: std.process.Init) !void {
 fn index(http: *HTTPRequest) !void {
     const app = http.getCtx(*App);
 
-    var w = ArenaWriter.init(http.arena);
-    defer w.deinit();
+    if (app.use_cache) {
+        app.cache_lock.lockShared(app.io) catch unreachable;
+        if (app.cached_page) |cp| {
+            defer app.cache_lock.unlockShared(app.io);
+            return http.html(cp);
+        }
+        app.cache_lock.unlockShared(app.io);
 
-    try zts.writeHeader(tmpl, &w);
-    try app.renderUsersTable(&w);
-    try zts.write(tmpl, "index_end", &w);
+        app.cache_lock.lock(app.io) catch unreachable;
+        defer app.cache_lock.unlock(app.io);
 
-    return http.html(w.items());
+        if (app.cached_page) |cp| return http.html(cp);
+
+        var aw = app.newArenaWriter();
+        defer aw.deinit();
+        try zts.writeHeader(tmpl, &aw);
+        try app.renderUsersTable(&aw);
+        try zts.write(tmpl, "index_end", &aw);
+        app.cached_page = try app.allocator.dupe(u8, aw.items());
+        return http.html(app.cached_page.?);
+    }
+
+    var aw = app.newArenaWriter();
+    defer aw.deinit();
+    try zts.writeHeader(tmpl, &aw);
+    try app.renderUsersTable(&aw);
+    try zts.write(tmpl, "index_end", &aw);
+    return http.html(aw.items());
 }
 
 fn staticHandler(http: *HTTPRequest) !void {
@@ -208,29 +251,26 @@ fn usersList(http: *HTTPRequest) !void {
     var mq = try app.pubsub.connect();
     defer mq.deinit();
     try mq.subscribe(.users);
-    while (try mq.nextTimeout(.fromSeconds(30))) |event| switch (event) {
+    while (try mq.next()) |event| switch (event) {
         .msg => {
             const w = sse.patchElementsWriter(.{});
             try app.renderUsersTable(w);
             try sse.flush();
         },
-        .timeout => {}, // try sse.keepalive(),
+        .timeout => {},
     };
 }
 
 fn handleCreate(http: *HTTPRequest) !void {
     const app = http.getCtx(*App);
-
     const Signals = struct { name: []const u8, email: []const u8, role: []const u8 };
     const s = http.readSignals(Signals) catch {
         http.status = .bad_request;
         return;
     };
-
     const name = std.mem.trim(u8, s.name, " \t\r\n");
     const email = std.mem.trim(u8, s.email, " \t\r\n");
     const role = if (s.role.len > 0) s.role else "member";
-
     var name_err: ?[]const u8 = null;
     var email_err: ?[]const u8 = null;
     if (name.len == 0) name_err = "Name is required.";
@@ -239,46 +279,29 @@ fn handleCreate(http: *HTTPRequest) !void {
     } else if (std.mem.indexOfScalar(u8, email, '@') == null) {
         email_err = "Please enter a valid email address.";
     }
-
     if (name_err != null or email_err != null) {
         var sse = try http.NewSSESync();
         defer sse.close();
         try sse.patchSignals(.{ .nameError = name_err orelse "", .emailError = email_err orelse "" }, .{});
         return;
     }
-
     _ = try app.insertUser(name, email, role);
-    try app.publishUsers();
-
-    // Reset form signals and close the dialog.
     var sse = try http.NewSSESync();
     defer sse.close();
     try sse.patchSignals(.{
-        .name = "",
-        .email = "",
-        .role = "member",
-        .nameError = "",
-        .emailError = "",
+        .name = "", .email = "", .role = "member",
+        .nameError = "", .emailError = "",
         .addOpen = false,
     }, .{});
 }
 
 fn handleDelete(http: *HTTPRequest) !void {
     const app = http.getCtx(*App);
-
-    const id_str = http.params.get("id") orelse {
+    const id = http.params.getInt(i64, "id") orelse {
         http.status = .not_found;
         return;
     };
-    const id = std.fmt.parseInt(i64, id_str, 10) catch {
-        http.status = .not_found;
-        return;
-    };
-
     try app.deleteUser(id);
-    try app.publishUsers();
-
     var sse = try http.NewSSESync();
     defer sse.close();
-    try sse.flush();
 }
